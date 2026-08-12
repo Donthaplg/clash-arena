@@ -1,0 +1,42 @@
+<!doctype html><html lang="fr"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no"><title>Clash Arena V1</title>
+<style>
+*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;background:#10131b;color:#fff;font-family:system-ui;touch-action:none}
+#game{position:relative;width:100%;height:100%;background:#202b32}
+#arena{position:absolute;inset:0;background:radial-gradient(circle,#42534c,#1c2829 72%);overflow:hidden}
+.wall{position:absolute;background:#5f4638;border:3px solid #392a24;border-radius:8px;box-shadow:0 5px 0 #18201f}
+#hud{position:absolute;z-index:10;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;align-items:center;font-weight:900;text-shadow:0 2px 3px #000}
+.bar{width:145px;height:14px;background:#252a31;border-radius:10px;border:2px solid #111;overflow:hidden}.fill{height:100%;background:#45e083;width:100%}
+#super{position:absolute;top:42px;left:12px;width:145px;height:8px;background:#252a31;border-radius:8px;overflow:hidden}.supfill{height:100%;background:#ffd53d;width:0}
+#msg{position:absolute;z-index:20;top:12%;left:50%;transform:translateX(-50%);font-size:24px;font-weight:1000;text-align:center;text-shadow:0 3px 5px #000}
+.player,.enemy{position:absolute;width:54px;height:54px;border-radius:50%;border:4px solid #111;z-index:5;transform:translate(-50%,-50%);box-shadow:0 5px 0 #101416}.player{background:#45a7ff}.enemy{background:#ef5363}
+.player:after,.enemy:after{content:"";position:absolute;width:17px;height:17px;background:#ffe0bd;border:3px solid #111;border-radius:50%;left:15px;top:-11px}
+.bullet{position:absolute;width:12px;height:12px;border-radius:50%;background:#ffe05a;border:2px solid #111;z-index:4}
+.enemybullet{background:#ff8c98}
+#joystick{position:absolute;z-index:30;left:24px;bottom:25px;width:145px;height:145px;border-radius:50%;background:#ffffff22;border:3px solid #ffffff33}
+#stick{position:absolute;left:42px;top:42px;width:60px;height:60px;border-radius:50%;background:#ffffff66;border:3px solid #fff8}
+.actions{position:absolute;z-index:30;right:18px;bottom:24px;display:flex;gap:12px;align-items:end}.btn{width:76px;height:76px;border-radius:50%;border:4px solid #15171d;color:#fff;font-weight:1000;font-size:13px;box-shadow:0 5px 0 #111;touch-action:none}.attack{background:#e94c5f}.special{background:#f0b82f;color:#231a00}.btn:active{transform:translateY(4px);box-shadow:0 1px 0 #111}
+#over{display:none;position:absolute;z-index:50;inset:0;background:#081016dd;align-items:center;justify-content:center;text-align:center}.card{background:#1b222c;border:2px solid #3a4554;border-radius:22px;padding:28px;width:min(88%,360px);box-shadow:0 15px 50px #000}.card h1{font-size:38px;margin:0 0 10px}.again{border:0;border-radius:14px;padding:15px 25px;font-weight:1000;font-size:17px;background:#45d58a}
+</style></head><body><div id="game"><div id="arena">
+<div class="wall" style="left:12%;top:22%;width:27%;height:10%"></div><div class="wall" style="right:12%;top:22%;width:27%;height:10%"></div>
+<div class="wall" style="left:38%;top:43%;width:24%;height:10%"></div><div class="wall" style="left:12%;bottom:22%;width:25%;height:10%"></div><div class="wall" style="right:12%;bottom:22%;width:25%;height:10%"></div>
+</div><div id="hud"><div>❤️ <div class="bar"><div class="fill" id="hp"></div></div></div><div>🏆 <span id="score">0</span></div></div><div id="super"><div class="supfill" id="sup"></div></div><div id="msg">ÉLIMINE L'ADVERSAIRE</div>
+<div class="player" id="p"></div><div class="enemy" id="e"></div>
+<div id="joystick"><div id="stick"></div></div><div class="actions"><button class="btn special" id="sp">SUPER</button><button class="btn attack" id="atk">ATTAQUE</button></div>
+<div id="over"><div class="card"><h1 id="result">VICTOIRE</h1><p id="reward">+10 trophées</p><button class="again" id="again">REJOUER</button></div></div>
+<script>
+const A=document.getElementById('arena'),P=document.getElementById('p'),E=document.getElementById('e'),hp=document.getElementById('hp'),sup=document.getElementById('sup'),score=document.getElementById('score'),msg=document.getElementById('msg');
+let px=.22,py=.55,ex=.78,ey=.45,ph=100,eh=100,sp=0,pts=0,over=false,moveX=0,moveY=0,last=performance.now(),enemyCd=0;
+function pos(el,x,y){el.style.left=(x*100)+'%';el.style.top=(y*100)+'%'}
+function reset(){px=.22;py=.55;ex=.78;ey=.45;ph=100;eh=100;sp=0;over=false;document.getElementById('over').style.display='none';render()}
+function render(){pos(P,px,py);pos(E,ex,ey);hp.style.width=ph+'%';sup.style.width=sp+'%';score.textContent=pts}
+function dist(){return Math.hypot(px-ex,py-ey)}
+function bullet(x,y,tx,ty,enemy=false){let b=document.createElement('div');b.className='bullet '+(enemy?'enemybullet':'');A.appendChild(b);let t=0,dx=tx-x,dy=ty-y,d=Math.hypot(dx,dy)||1;let id=setInterval(()=>{t+=.035;x+=dx/d*.035;y+=dy/d*.035;pos(b,x,y);if(t>1.1||x<0||x>1||y<0||y>1){clearInterval(id);b.remove();return}if(!enemy&&Math.hypot(x-ex,y-ey)<.045){eh=Math.max(0,eh-12);sp=Math.min(100,sp+14);b.remove();clearInterval(id);if(eh<=0)finish(true);}} ,16)}
+function attack(){if(over)return;if(dist()<.75){let a=Math.atan2(ey-py,ex-px),tx=px+Math.cos(a)*.85,ty=py+Math.sin(a)*.85;bullet(px,py,tx,ty)}}
+function special(){if(over||sp<100)return;sp=0;let a=Math.atan2(ey-py,ex-px),tx=px+Math.cos(a)*1.2,ty=py+Math.sin(a)*1.2;bullet(px,py,tx,ty);setTimeout(()=>{if(!over&&dist()<.5){eh=Math.max(0,eh-45);if(eh<=0)finish(true)}},350)}
+function finish(win){over=true;document.getElementById('result').textContent=win?'🏆 VICTOIRE':'💀 DÉFAITE';document.getElementById('reward').textContent=win?'+10 trophées':'Entraîne-toi et réessaie';if(win)pts+=10;document.getElementById('over').style.display='flex';render()}
+document.getElementById('atk').onpointerdown=e=>{e.preventDefault();attack()};document.getElementById('sp').onpointerdown=e=>{e.preventDefault();special()};document.getElementById('again').onclick=reset;
+let joy=false;const J=document.getElementById('joystick'),S=document.getElementById('stick');
+J.onpointerdown=e=>{joy=true;J.setPointerCapture(e.pointerId);moveJoy(e)};J.onpointermove=e=>{if(joy)moveJoy(e)};J.onpointerup=()=>{joy=false;moveX=moveY=0;S.style.left='42px';S.style.top='42px'};
+function moveJoy(e){let r=J.getBoundingClientRect(),cx=r.left+r.width/2,cy=r.top+r.height/2,dx=e.clientX-cx,dy=e.clientY-cy,m=Math.min(48,Math.hypot(dx,dy)),a=Math.atan2(dy,dx);moveX=Math.cos(a)*(m/48);moveY=Math.sin(a)*(m/48);S.style.left=(42+Math.cos(a)*m)+'px';S.style.top=(42+Math.sin(a)*m)+'px'}
+function loop(now){let dt=Math.min(.035,(now-last)/1000);last=now;if(!over){px=Math.max(.06,Math.min(.94,px+moveX*dt*.45));py=Math.max(.1,Math.min(.9,py+moveY*dt*.45));let dx=px-ex,dy=py-ey,d=Math.hypot(dx,dy)||1;if(d>.28){ex+=dx/d*dt*.14;ey+=dy/d*dt*.14}else if(enemyCd<=0){enemyCd=1.2;bullet(ex,ey,px,py,true)}enemyCd-=dt;render()}requestAnimationFrame(loop)}reset();requestAnimationFrame(loop);
+</script></div></body></html>
