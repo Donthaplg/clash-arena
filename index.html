@@ -73,10 +73,69 @@ html,body{margin:0;width:100%;height:100%;overflow:hidden;touch-action:none;back
 </div>
 
 <script>
-// Canvas-based rendering for visual performance + improved visuals
+// OffscreenCanvas renderer worker source as a blob string
+const rendererWorkerSrc = `
+let canvas,ctx,dpr=1,w=0,h=0;
+self.onmessage = function(e){
+  const msg = e.data;
+  if(msg.type==='init'){
+    canvas = msg.canvas;
+    dpr = msg.dpr || 1;
+    canvas.width = Math.round(msg.width * dpr);
+    canvas.height = Math.round(msg.height * dpr);
+    canvas.style = {};
+    ctx = canvas.getContext('2d');
+    ctx.setTransform(dpr,0,0,dpr,0,0);
+    w = msg.width; h = msg.height;
+    return;
+  }
+  if(msg.type==='state' && ctx){
+    const s = msg.state;
+    // clear
+    ctx.clearRect(0,0,w,h);
+    // background
+    const g = ctx.createLinearGradient(0,0,w,h); g.addColorStop(0,'rgba(12,18,38,0.6)'); g.addColorStop(1,'rgba(4,8,20,0.6)'); ctx.fillStyle = g; ctx.fillRect(0,0,w,h);
+    // walls
+    ctx.save(); ctx.globalAlpha = 0.95; for(const wall of s.walls){ const lx = wall.left*w, ty = wall.top*h, rw = (wall.right-wall.left)*w, rh = (wall.bottom-wall.top)*h; ctx.fillStyle = '#2f1e17'; ctx.fillRect(lx,ty,rw,rh); ctx.strokeStyle='#392b24'; ctx.lineWidth=3; ctx.strokeRect(lx,ty,rw,rh); }
+    // particles
+    for(let i=s.particles.length-1;i>=0;i--){ const p=s.particles[i]; ctx.globalAlpha = Math.max(0,p.life); ctx.fillStyle = p.color; ctx.beginPath(); ctx.arc(p.x*w,p.y*h,2,0,Math.PI*2); ctx.fill(); }
+    // bullets
+    ctx.save(); for(const b of s.bullets){ const bx=b.x*w, by=b.y*h; ctx.beginPath(); ctx.fillStyle = (b.ownerId==='player')? '#ffe35b' : '#ff8190'; ctx.shadowColor = ctx.fillStyle; ctx.shadowBlur = 10; ctx.arc(bx,by,6,0,Math.PI*2); ctx.fill(); ctx.shadowBlur = 0; } ctx.restore();
+    // actors
+    for(const a of s.actors){ const ax=a.x*w, ay=a.y*h; ctx.beginPath(); ctx.fillStyle = a.color; ctx.shadowColor = a.color; ctx.shadowBlur = 18; ctx.arc(ax,ay,28,0,Math.PI*2); ctx.fill(); ctx.shadowBlur = 0; ctx.beginPath(); ctx.fillStyle = '#111'; ctx.arc(ax,ay,16,0,Math.PI*2); ctx.fill(); const hpw = 28*(a.hp/100); ctx.fillStyle='#2ecc71'; ctx.fillRect(ax-28,ay+22,hpw,6); ctx.strokeStyle='#000'; ctx.lineWidth=1; ctx.strokeRect(ax-28,ay+22,56,6); }
+    // player
+    if(s.player.hp>0){ const px=s.player.x*w, py=s.player.y*h; ctx.beginPath(); ctx.fillStyle=s.player.color; ctx.shadowColor=s.player.color; ctx.shadowBlur=22; ctx.arc(px,py,30,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0; ctx.beginPath(); ctx.fillStyle='#0b0b0d'; ctx.arc(px,py,18,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.strokeStyle='#fff'; ctx.lineWidth=1; ctx.globalAlpha=0.6; ctx.arc(px,py,36,0,Math.PI*2); ctx.stroke(); ctx.globalAlpha=1; }
+    ctx.restore();
+  }
+};
+`;
+
 const arena=document.getElementById('arena');
 const canvas=document.getElementById('gameCanvas');
-const ctx=canvas.getContext('2d');
+let rendererWorker = null;
+let offscreenSupported = false;
+
+function startRendererWorker(){
+  if(typeof OffscreenCanvas === 'undefined' || typeof Worker === 'undefined') return false;
+  try{
+    const blob = new Blob([rendererWorkerSrc],{type:'application/javascript'});
+    const url = URL.createObjectURL(blob);
+    rendererWorker = new Worker(url);
+    const a = arena.getBoundingClientRect();
+    const off = canvas.transferControlToOffscreen();
+    const dpr = devicePixelRatio || 1;
+    rendererWorker.postMessage({type:'init',canvas:off,width:a.width,height:a.height,dpr:dpr},{transfer:[off]});
+    offscreenSupported = true;
+    return true;
+  }catch(err){ console.warn('Offscreen canvas worker init failed:',err); offscreenSupported=false; return false; }
+}
+
+// If Offscreen is supported, initialize worker, otherwise fallback to main-thread rendering
+startRendererWorker();
+
+const ctxMain = (!offscreenSupported) ? canvas.getContext('2d') : null;
+
+// rest of game code (physics, inputs) — main thread keeps the logic and sends state to renderer
 const hpBar=document.getElementById('hp'), statHp=document.getElementById('statHp'), statEnem=document.getElementById('statEnem');
 const atk=document.getElementById('atk'), sup=document.getElementById('super');
 const msg=document.getElementById('msg'), ov=document.getElementById('over'), res=document.getElementById('res'), rw=document.getElementById('rw');
@@ -108,7 +167,7 @@ function buildWalls(){
   return walls.map(w=>{const r=w.getBoundingClientRect();return{left:(r.left-a.left)/a.width,top:(r.top-a.top)/a.height,right:(r.right-a.left)/a.width,bottom:(r.bottom-a.top)/a.height}});
 }
 let walls=buildWalls();
-window.addEventListener('resize',()=>{walls=buildWalls(); resizeCanvas();});
+window.addEventListener('resize',()=>{walls=buildWalls(); resizeCanvas(); if(offscreenSupported){const a=arena.getBoundingClientRect(); rendererWorker.postMessage({type:'init',width:a.width,height:a.height,dpr:devicePixelRatio||1});}});
 
 // Player/actors/bullets
 let player={x:.22,y:.55,hp:100,maxHp:100,velX:0,velY:0,acc:0.04,ammo:3,maxAmmo:3,special:100,weapon:selectedChar.weapon,color:selectedChar.color};
@@ -123,7 +182,7 @@ function startGame(){ const modeInput=document.querySelector('input[name="mode"]
 document.getElementById('startBtn').onclick=startGame;
 
 // Canvas sizing
-function resizeCanvas(){ const r=arena.getBoundingClientRect(); canvas.width = Math.round(r.width * devicePixelRatio); canvas.height = Math.round(r.height * devicePixelRatio); canvas.style.width = r.width+'px'; canvas.style.height = r.height+'px'; ctx.setTransform(devicePixelRatio,0,0,devicePixelRatio,0,0); }
+function resizeCanvas(){ const r=arena.getBoundingClientRect(); canvas.width = r.width; canvas.height = r.height; canvas.style.width = r.width+'px'; canvas.style.height = r.height+'px'; }
 resizeCanvas();
 
 // Helpers
@@ -140,7 +199,7 @@ function mv(q){ const r=j.getBoundingClientRect(),a=Math.atan2(q.clientY-r.top-r
 
 // Shooting
 let mouseX=0,mouseY=0; window.addEventListener('pointermove',e=>{ const a=arena.getBoundingClientRect(); mouseX=(e.clientX-a.left)/a.width; mouseY=(e.clientY-a.top)/a.height; });
-function shoot(shooter,targetX,targetY){ if(shooter===player && player.ammo<=0) return; const w=shooter.weapon; if(!w) return; const angle=Math.atan2(targetY-shooter.y,targetX-shooter.x); const shots=(w.pellets||1); for(let i=0;i<shots;i++){ const spread=(w.spread||0)*(Math.random()*2-1); const a=angle+spread; const speed=w.projectileSpeed; bullets.push({x:shooter.x,y:shooter.y,dx:Math.cos(a)*speed,dy:Math.sin(a)*speed,owner:shooter,damage:w.damage,life:1.5}); } if(shooter===player){ player.ammo--; updateAmmoUI(); }}
+function shoot(shooter,targetX,targetY){ if(shooter===player && player.ammo<=0) return; const w=shooter.weapon; if(!w) return; const angle=Math.atan2(targetY-shooter.y,targetX-shooter.x); const shots=(w.pellets||1); for(let i=0;i<shots;i++){ const spread=(w.spread||0)*(Math.random()*2-1); const a=angle+spread; const speed=w.projectileSpeed; bullets.push({x:shooter.x,y:shooter.y,dx:Math.cos(a)*speed,dy:Math.sin(a)*speed,ownerId:(shooter===player?'player':shooter.id||'bot'),damage:w.damage,life:1.5}); } if(shooter===player){ player.ammo--; updateAmmoUI(); }}
 
 atk.onpointerdown=()=>{ if(gameStarted) shoot(player, mouseX, mouseY); };
 
@@ -155,40 +214,21 @@ function circleRectCollide(cx,cy,r,rect){ const nearestX=Math.max(rect.left,Math
 function willCollide(x,y,r){ for(const w of walls) if(circleRectCollide(x,y,r,w)) return true; return false; }
 
 // Update bullets
-function updateBullets(dt){ for(let i=bullets.length-1;i>=0;i--){ const b=bullets[i]; b.x+=b.dx*dt*0.016; b.y+=b.dy*dt*0.016; b.life-=dt*0.016; if(willCollide(b.x,b.y,0.02) || b.x<0||b.x>1||b.y<0||b.y>1){ bullets.splice(i,1); continue; } if(b.owner!==player){ if(Math.hypot(player.x-b.x,player.y-b.y)<0.06){ player.hp-=b.damage; spawnParticles(player.x,player.y,'#ff6b6b',10); bullets.splice(i,1); if(player.hp<=0) end(false,'Tu as été éliminé'); continue; } } if(b.owner===player){ for(let j=actors.length-1;j>=0;j--){ const a=actors[j]; if(Math.hypot(a.x-b.x,a.y-b.y)<0.06){ a.hp-=b.damage; spawnParticles(a.x,a.y,'#ffd166',10); bullets.splice(i,1); if(a.hp<=0){ actors.splice(j,1); if(mode==='duel') end(true,'Adversaire éliminé'); else if(actors.length===0) end(true,'Tu es le dernier survivant!'); } break; } } } if(b.life<=0) bullets.splice(i,1); } }
+function updateBullets(dt){ for(let i=bullets.length-1;i>=0;i--){ const b=bullets[i]; b.x+=b.dx*dt*0.016; b.y+=b.dy*dt*0.016; b.life-=dt*0.016; if(willCollide(b.x,b.y,0.02) || b.x<0||b.x>1||b.y<0||b.y>1){ bullets.splice(i,1); continue; } if(b.ownerId!=='player'){ if(Math.hypot(player.x-b.x,player.y-b.y)<0.06){ player.hp-=b.damage; spawnParticles(player.x,player.y,'#ff6b6b',10); bullets.splice(i,1); if(player.hp<=0) end(false,'Tu as été éliminé'); continue; } } if(b.ownerId==='player'){ for(let j=actors.length-1;j>=0;j--){ const a=actors[j]; if(Math.hypot(a.x-b.x,a.y-b.y)<0.06){ a.hp-=b.damage; spawnParticles(a.x,a.y,'#ffd166',10); bullets.splice(i,1); if(a.hp<=0){ actors.splice(j,1); if(mode==='duel') end(true,'Adversaire éliminé'); else if(actors.length===0) end(true,'Tu es le dernier survivant!'); } break; } } } if(b.life<=0) bullets.splice(i,1); } }
 
-// Rendering on canvas
-function renderCanvas(){ const w=canvas.clientWidth, h=canvas.clientHeight; ctx.clearRect(0,0,w,h);
-  // background subtle vignette
-  const g=ctx.createLinearGradient(0,0,w,h); g.addColorStop(0,'rgba(12,18,38,0.6)'); g.addColorStop(1,'rgba(4,8,20,0.6)'); ctx.fillStyle=g; ctx.fillRect(0,0,w,h);
-  // draw walls as dark rectangles
-  ctx.save(); ctx.globalAlpha=0.95; for(const wall of walls){ const lx=toPixelsX(wall.left), ty=toPixelsY(wall.top), rw=toPixelsX(wall.right)-lx, rh=toPixelsY(wall.bottom)-ty; ctx.fillStyle='#2f1e17'; ctx.fillRect(lx,ty,rw,rh); ctx.strokeStyle='#392b24'; ctx.lineWidth=3; ctx.strokeRect(lx,ty,rw,rh); }
-  // draw particles
-  for(let i=particles.length-1;i>=0;i--){ const p=particles[i]; p.x+=p.dx*0.016; p.y+=p.dy*0.016; p.life-=0.016; const px=toPixelsX(p.x), py=toPixelsY(p.y); ctx.globalAlpha=Math.max(0,p.life); ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(px,py,2,0,Math.PI*2); ctx.fill(); if(p.life<=0) particles.splice(i,1); }
-  // draw bullets as small circles with glow
-  ctx.save(); for(const b of bullets){ const bx=toPixelsX(b.x), by=toPixelsY(b.y); ctx.beginPath(); ctx.fillStyle = (b.owner===player)?'#ffe35b':'#ff8190'; ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=10; ctx.arc(bx,by,6,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0; }
-  ctx.restore();
-  // draw actors
-  for(const a of actors){ const ax=toPixelsX(a.x), ay=toPixelsY(a.y); // outer glow
-    ctx.beginPath(); ctx.fillStyle=a.color; ctx.shadowColor=a.color; ctx.shadowBlur=18; ctx.arc(ax,ay,28,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0; // inner
-    ctx.beginPath(); ctx.fillStyle='#111'; ctx.arc(ax,ay,16,0,Math.PI*2); ctx.fill(); // health bar
-    const hpw=28*(a.hp/100); ctx.fillStyle='#2ecc71'; ctx.fillRect(ax-28,ay+22,hpw,6); ctx.strokeStyle='#000'; ctx.lineWidth=1; ctx.strokeRect(ax-28,ay+22,56,6);
-  }
-  // player
-  if(player.hp>0){ const px=toPixelsX(player.x), py=toPixelsY(player.y); ctx.beginPath(); ctx.fillStyle=player.color; ctx.shadowColor=player.color; ctx.shadowBlur=22; ctx.arc(px,py,30,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0; ctx.beginPath(); ctx.fillStyle='#0b0b0d'; ctx.arc(px,py,18,0,Math.PI*2); ctx.fill(); // crosshair
-    ctx.beginPath(); ctx.strokeStyle='#fff'; ctx.lineWidth=1; ctx.globalAlpha=0.6; ctx.arc(px,py,36,0,Math.PI*2); ctx.stroke(); ctx.globalAlpha=1; // hp text
-  }
-  ctx.restore();
+// Fallback renderer when OffscreenCanvas not available
+function fallbackRender(state){ const ctx = ctxMain; if(!ctx) return; const w = canvas.clientWidth, h = canvas.clientHeight; ctx.clearRect(0,0,w,h); const g = ctx.createLinearGradient(0,0,w,h); g.addColorStop(0,'rgba(12,18,38,0.6)'); g.addColorStop(1,'rgba(4,8,20,0.6)'); ctx.fillStyle=g; ctx.fillRect(0,0,w,h); ctx.save(); ctx.globalAlpha=0.95; for(const wall of state.walls){ const lx=wall.left*w, ty=wall.top*h, rw=(wall.right-wall.left)*w, rh=(wall.bottom-wall.top)*h; ctx.fillStyle='#2f1e17'; ctx.fillRect(lx,ty,rw,rh); ctx.strokeStyle='#392b24'; ctx.lineWidth=3; ctx.strokeRect(lx,ty,rw,rh); } for(let i=state.particles.length-1;i>=0;i--){ const p=state.particles[i]; ctx.globalAlpha=Math.max(0,p.life); ctx.fillStyle=p.color; ctx.beginPath(); ctx.arc(p.x*w,p.y*h,2,0,Math.PI*2); ctx.fill(); } ctx.save(); for(const b of state.bullets){ const bx=b.x*w, by=b.y*h; ctx.beginPath(); ctx.fillStyle=(b.ownerId==='player')?'#ffe35b':'#ff8190'; ctx.shadowColor=ctx.fillStyle; ctx.shadowBlur=10; ctx.arc(bx,by,6,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0; } ctx.restore(); for(const a of state.actors){ const ax=a.x*w, ay=a.y*h; ctx.beginPath(); ctx.fillStyle=a.color; ctx.shadowColor=a.color; ctx.shadowBlur=18; ctx.arc(ax,ay,28,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0; ctx.beginPath(); ctx.fillStyle='#111'; ctx.arc(ax,ay,16,0,Math.PI*2); ctx.fill(); const hpw=28*(a.hp/100); ctx.fillStyle='#2ecc71'; ctx.fillRect(ax-28,ay+22,hpw,6); ctx.strokeStyle='#000'; ctx.lineWidth=1; ctx.strokeRect(ax-28,ay+22,56,6); } if(state.player.hp>0){ const px=state.player.x*w, py=state.player.y*h; ctx.beginPath(); ctx.fillStyle=state.player.color; ctx.shadowColor=state.player.color; ctx.shadowBlur=22; ctx.arc(px,py,30,0,Math.PI*2); ctx.fill(); ctx.shadowBlur=0; ctx.beginPath(); ctx.fillStyle='#0b0b0d'; ctx.arc(px,py,18,0,Math.PI*2); ctx.fill(); ctx.beginPath(); ctx.strokeStyle='#fff'; ctx.lineWidth=1; ctx.globalAlpha=0.6; ctx.arc(px,py,36,0,Math.PI*2); ctx.stroke(); ctx.globalAlpha=1; } ctx.restore(); }
+
+function sendStateToRenderer(){ const state = { walls: walls, actors: actors.map(a=>({x:a.x,y:a.y,hp:a.hp,color:a.color,id:a.id})), bullets: bullets.map(b=>({x:b.x,y:b.y,ownerId:b.ownerId,damage:b.damage})), particles: particles.map(p=>({x:p.x,y:p.y,life:p.life,color:p.color})), player: {x:player.x,y:player.y,hp:player.hp,color:player.color} };
+  if(offscreenSupported && rendererWorker){ rendererWorker.postMessage({type:'state',state:state}); }
+  else { fallbackRender(state); }
 }
 
-function setPosUI(){ hpBar.style.width=(player.hp/player.maxHp)*100+'%'; statHp.textContent=Math.max(0,Math.floor(player.hp)); statEnem.textContent=actors.map(a=>a.hp).join(' / '); scoreboard.innerHTML='<strong>Scoreboard</strong><br>'+(player.hp>0?`<div style="color:${player.color}">YOU: ${Math.floor(player.hp)}</div>`:'')+actors.map(a=>`<div style="color:${a.color}">${a.id}: ${Math.max(0,Math.floor(a.hp))}</div>`).join(''); sup.classList.toggle('unavailable',player.special<100);
-}
+function setPosUI(){ hpBar.style.width=(player.hp/player.maxHp)*100+'%'; statHp.textContent=Math.max(0,Math.floor(player.hp)); statEnem.textContent=actors.map(a=>a.hp).join(' / '); scoreboard.innerHTML='<strong>Scoreboard</strong><br>'+(player.hp>0?`<div style="color:${player.color}">YOU: ${Math.floor(player.hp)}</div>`:'')+actors.map(a=>`<div style="color:${a.color}">${a.id}: ${Math.max(0,Math.floor(a.hp))}</div>`).join(''); sup.classList.toggle('unavailable',player.special<100); }
 
 function updateAmmoUI(){ ammoDisplay.innerHTML=''; for(let i=0;i<player.maxAmmo;i++){ const dot=document.createElement('div'); dot.className='ammo-dot'+(i<player.ammo?'':' empty'); ammoDisplay.appendChild(dot);} }
 
-function spawnCollectible(x,y){ // small visual on canvas
-  particles.push({x,y,dx:0,dy:0,life:1.5,color:'#ffd166'});
-}
+function spawnCollectible(x,y){ particles.push({x,y,dx:0,dy:0,life:1.5,color:'#ffd166'}); }
 
 function end(win,reason){ gameStarted=false; ov.style.display='flex'; res.textContent=win?'🏆 VICTOIRE':'💀 DÉFAITE'; rw.textContent=reason||''; }
 
@@ -204,10 +244,12 @@ function loop(now){ const dt=(now-lastTime)/16.67; lastTime=now; if(gameStarted)
   for(const a of actors) aiStep(a,dt);
   // bullets
   updateBullets(dt);
+  // particles update
+  for(let i=particles.length-1;i>=0;i--){ const p=particles[i]; p.x+=p.dx*0.016; p.y+=p.dy*0.016; p.life-=0.016; if(p.life<=0) particles.splice(i,1); }
   // ammo regen
   ammoTimer+=dt*0.016; if(ammoTimer>0.5){ ammoTimer=0; if(player.ammo<player.maxAmmo && Math.random()<0.02){ player.ammo++; updateAmmoUI(); spawnCollectible(Math.random()*0.8+0.1,Math.random()*0.7+0.15); } }
   player.special=Math.min(100,player.special+0.2*dt);
-  setPosUI(); renderCanvas(); }
+  setPosUI(); sendStateToRenderer(); }
   requestAnimationFrame(loop);
 }
 resizeCanvas(); updateAmmoUI(); requestAnimationFrame(loop);
@@ -215,8 +257,8 @@ resizeCanvas(); updateAmmoUI(); requestAnimationFrame(loop);
 // Input: click to shoot
 canvas.addEventListener('pointerdown',e=>{ if(!gameStarted) return; const a=arena.getBoundingClientRect(); const tx=(e.clientX-a.left)/a.width, ty=(e.clientY-a.top)/a.height; shoot(player,tx,ty); });
 
-// Particle and visual helpers executed on resize
-setTimeout(()=>{walls=buildWalls(); resizeCanvas();},100);
+// Make sure walls are rebuilt after start
+setTimeout(()=>{walls=buildWalls(); resizeCanvas(); if(offscreenSupported){ const a=arena.getBoundingClientRect(); rendererWorker.postMessage({type:'init',width:a.width,height:a.height,dpr:devicePixelRatio||1}); } },100);
 
 </script>
 </body></html>
