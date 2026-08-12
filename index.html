@@ -3,22 +3,47 @@
 <meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1,user-scalable=no">
 <title>Clash Arena</title>
 <style>
-*{box-sizing:border-box}html,body{margin:0;width:100%;height:100%;overflow:hidden;touch-action:none;background:#172126;font-family:Arial;color:white}
-#arena{position:relative;width:100%;height:100%;background:radial-gradient(circle,#496057,#182326)}
-.wall{position:absolute;background:#765440;border:3px solid #392b24;border-radius:9px}
-#p,#e{position:absolute;width:54px;height:54px;border:4px solid #111;border-radius:50%;transform:translate(-50%,-50%);z-index:3}
-#p{background:#3ca7ff}#e{background:#ed5262}
-#hud{position:absolute;z-index:10;top:12px;left:12px;right:12px;display:flex;justify-content:space-between;font-weight:bold}
-.bar{width:150px;height:15px;background:#222;border:2px solid #111;border-radius:10px}.fill{height:100%;background:#40dd78;width:100%}
-#msg{position:absolute;z-index:10;top:55px;width:100%;text-align:center;font-weight:bold}
-#joy{position:absolute;z-index:20;left:22px;bottom:24px;width:145px;height:145px;border:3px solid #ffffff33;background:#ffffff18;border-radius:50%}
-#stick{position:absolute;left:42px;top:42px;width:60px;height:60px;border-radius:50%;background:#ffffff66}
-#atk,#super{position:absolute;z-index:20;border:4px solid #111;border-radius:50%;color:white;font-weight:bold}
-#atk{right:20px;bottom:25px;width:82px;height:82px;background:#e94c5f}
-#super{right:112px;bottom:45px;width:68px;height:68px;background:#efbd32;color:#211900}
-#over{display:none;position:absolute;z-index:30;inset:0;background:#000b;align-items:center;justify-content:center;text-align:center}
-.card{background:#202a33;padding:28px;border-radius:20px}.card button{padding:13px 25px;border:0;border-radius:12px;font-weight:bold}
-.b{position:absolute;width:12px;height:12px;border-radius:50%;background:#ffe35b;border:2px solid #111;z-index:4}
+*{box-sizing:border-box}
+html,body{margin:0;width:100%;height:100%;overflow:hidden;touch-action:none;background:#1a1a2e;font-family:'Arial',sans-serif;color:white}
+#arena{position:relative;width:100%;height:100%;background:linear-gradient(135deg,#16213e 0%,#0f3460 50%,#16213e 100%);overflow:hidden}
+#arena::before{content:'';position:absolute;top:0;left:0;right:0;bottom:0;background-image:radial-gradient(circle at 20% 50%, rgba(255,193,7,0.03) 1px, transparent 1px);background-size:50px 50px;pointer-events:none}
+.wall{position:absolute;background:linear-gradient(135deg,#765440 0%,#5a3a2a 100%);border:3px solid #392b24;border-radius:9px;box-shadow:0 4px 8px rgba(0,0,0,0.5)}
+.collectible{position:absolute;width:24px;height:24px;border-radius:50%;border:2px solid #ffd700;background:radial-gradient(circle, #ffed4e, #ffc107);box-shadow:0 0 10px #ffc107;z-index:2;animation:pulse 0.8s infinite}
+@keyframes pulse{0%,100%{transform:scale(1);box-shadow:0 0 10px #ffc107}50%{transform:scale(1.2);box-shadow:0 0 20px #ffc107}}
+#p,#e{position:absolute;width:54px;height:54px;border:4px solid #111;border-radius:50%;transform:translate(-50%,-50%);z-index:3;box-shadow:0 0 20px rgba(60,167,255,0.5)}
+#p{background:linear-gradient(135deg,#3ca7ff,#1e88e5);animation:playerGlow 1s infinite}
+#e{background:linear-gradient(135deg,#ed5262,#c41c3b);animation:enemyGlow 1s infinite}
+@keyframes playerGlow{0%,100%{box-shadow:0 0 20px rgba(60,167,255,0.5)}50%{box-shadow:0 0 30px rgba(60,167,255,0.8)}}
+@keyframes enemyGlow{0%,100%{box-shadow:0 0 20px rgba(237,82,98,0.5)}50%{box-shadow:0 0 30px rgba(237,82,98,0.8)}}
+#hud{position:absolute;z-index:10;top:12px;left:12px;right:12px;display:grid;grid-template-columns:1fr 1fr 1fr;gap:12px;font-weight:bold}
+.hud-item{background:rgba(0,0,0,0.6);padding:8px 12px;border-radius:12px;border:2px solid #333;display:flex;align-items:center;gap:8px}
+.bar{flex:1;height:12px;background:#222;border:2px solid #111;border-radius:10px;overflow:hidden}.fill{height:100%;background:linear-gradient(90deg,#40dd78,#2ecc71);width:100%;transition:width 0.1s}
+#ammo{display:flex;gap:4px}
+.ammo-dot{width:8px;height:8px;border-radius:50%;background:#ffb700;border:1px solid #fff}
+.ammo-dot.empty{background:#333;border-color:#555}
+.resource{display:flex;align-items:center;gap:6px}
+#msg{position:absolute;z-index:10;top:60px;width:100%;text-align:center;font-weight:bold;font-size:18px;text-shadow:2px 2px 4px rgba(0,0,0,0.8)}
+#joy{position:absolute;z-index:20;left:22px;bottom:24px;width:145px;height:145px;border:3px solid #ffffff33;background:rgba(255,255,255,0.08);border-radius:50%;box-shadow:inset 0 0 10px rgba(0,0,0,0.5)}
+#stick{position:absolute;left:42px;top:42px;width:60px;height:60px;border-radius:50%;background:linear-gradient(135deg,#ffffff99,#ffffff66);box-shadow:0 4px 8px rgba(0,0,0,0.5);transition:all 0.05s}
+#atk,#super{position:absolute;z-index:20;border:4px solid #111;border-radius:50%;color:white;font-weight:bold;font-size:24px;cursor:pointer;transition:all 0.1s;user-select:none}
+#atk{right:20px;bottom:25px;width:82px;height:82px;background:linear-gradient(135deg,#e94c5f,#c41c3b);box-shadow:0 4px 12px rgba(233,76,95,0.5)}
+#atk:active{transform:scale(0.95);box-shadow:0 2px 6px rgba(233,76,95,0.5)}
+#super{right:112px;bottom:45px;width:68px;height:68px;background:linear-gradient(135deg,#efbd32,#ffc107);color:#211900;box-shadow:0 4px 12px rgba(239,189,50,0.5)}
+#super:active{transform:scale(0.95);box-shadow:0 2px 6px rgba(239,189,50,0.5)}
+#super.unavailable{opacity:0.4;cursor:not-allowed}
+#over{display:none;position:absolute;z-index:30;inset:0;background:rgba(0,0,0,0.85);align-items:center;justify-content:center;text-align:center;backdrop-filter:blur(4px)}
+.card{background:linear-gradient(135deg,#202a33,#1a2332);padding:28px;border-radius:20px;border:2px solid #ffc107;box-shadow:0 8px 32px rgba(0,0,0,0.8)}
+.card h1{font-size:36px;margin:0 0 10px 0}
+.card p{font-size:18px;color:#aaa;margin:10px 0}
+.card button{padding:13px 25px;border:0;border-radius:12px;font-weight:bold;background:linear-gradient(135deg,#ffc107,#ffb700);color:#211900;cursor:pointer;font-size:16px;transition:all 0.2s}
+.card button:hover{transform:scale(1.05);box-shadow:0 4px 12px rgba(255,193,7,0.5)}
+.b{position:absolute;width:12px;height:12px;border-radius:50%;background:#ffe35b;border:2px solid #111;z-index:4;box-shadow:0 0 8px #ffe35b;animation:bulletTrail 0.1s}
+@keyframes bulletTrail{0%{opacity:1;transform:scale(1)}100%{opacity:0.7;transform:scale(0.8)}}
+#floatingDamage{position:absolute;font-weight:bold;pointer-events:none;z-index:5;text-shadow:2px 2px 4px rgba(0,0,0,0.8)}
+.damage-text{animation:floatUp 0.8s ease-out forwards}
+@keyframes floatUp{0%{opacity:1;transform:translateY(0)}100%{opacity:0;transform:translateY(-40px)}}
+#stats{position:absolute;bottom:200px;left:12px;background:rgba(0,0,0,0.6);padding:12px;border-radius:12px;border:2px solid #333;z-index:5;font-size:12px}
+.stat-line{display:flex;justify-content:space-between;gap:16px;margin:4px 0}
 </style></head><body>
 <div id="arena">
 <div class="wall" style="left:10%;top:23%;width:28%;height:10%"></div>
@@ -26,22 +51,186 @@
 <div class="wall" style="left:38%;top:44%;width:24%;height:10%"></div>
 <div class="wall" style="left:10%;bottom:22%;width:25%;height:10%"></div>
 <div class="wall" style="right:10%;bottom:22%;width:25%;height:10%"></div>
-<div id="hud"><div>❤️ <div class="bar"><div id="hp" class="fill"></div></div></div><div>🏆 <span id="t">0</span></div></div>
-<div id="msg">ÉLIMINE L'ADVERSAIRE</div><div id="p"></div><div id="e"></div>
-<div id="joy"><div id="stick"></div></div><button id="super">SUPER</button><button id="atk">ATTAQUE</button>
-<div id="over"><div class="card"><h1 id="res"></h1><p id="rw"></p><button onclick="location.reload()">REJOUER</button></div></div>
+
+<div id="hud">
+  <div class="hud-item">
+    <span>❤️</span>
+    <div class="bar"><div id="hp" class="fill"></div></div>
+  </div>
+  <div class="hud-item">
+    <span>🏆</span>
+    <span id="t">0</span>
+  </div>
+  <div class="hud-item">
+    <div class="resource">
+      <span>🔋</span>
+      <div id="ammo"></div>
+    </div>
+  </div>
 </div>
+
+<div id="msg">⚡ ÉLIMINER L'ADVERSAIRE</div>
+<div id="stats">
+  <div class="stat-line"><span>VOS HP:</span><span id="statHp">100</span></div>
+  <div class="stat-line"><span>ENNEMI:</span><span id="statEnem">100</span></div>
+</div>
+
+<div id="p"></div><div id="e"></div>
+
+<div id="joy"><div id="stick"></div></div>
+<button id="super">⚡</button>
+<button id="atk">🎯</button>
+
+<div id="over"><div class="card">
+  <h1 id="res"></h1>
+  <p id="rw"></p>
+  <button onclick="location.reload()">REJOUER</button>
+</div></div>
+</div>
+
 <script>
-const p=document.getElementById('p'),e=document.getElementById('e'),hp=document.getElementById('hp'),ov=document.getElementById('over'),res=document.getElementById('res'),rw=document.getElementById('rw'),sup=document.getElementById('super');
-let x=.22,y=.55,ex=.78,ey=.45,H=100,E=100,S=0,dx=0,dy=0,cd=0,dead=0;
+const p=document.getElementById('p'),e=document.getElementById('e'),hp=document.getElementById('hp'),ov=document.getElementById('over'),res=document.getElementById('res'),rw=document.getElementById('rw'),msg=document.getElementById('msg'),arena=document.getElementById('arena'),atk=document.getElementById('atk'),sup=document.getElementById('super'),ammoDisplay=document.getElementById('ammo'),statHp=document.getElementById('statHp'),statEnem=document.getElementById('statEnem');
+
+let x=.22,y=.55,ex=.78,ey=.45,H=100,E=100,S=0,dx=0,dy=0,cd=0,dead=0,maxAmmo=3,ammo=3;
+
+function updateAmmo(){
+  ammoDisplay.innerHTML='';
+  for(let i=0;i<maxAmmo;i++){
+    const dot=document.createElement('div');
+    dot.className='ammo-dot'+(i<ammo?'':' empty');
+    ammoDisplay.appendChild(dot);
+  }
+}
+
 function pos(a,x,y){a.style.left=x*100+'%';a.style.top=y*100+'%'}
-function end(win){dead=1;res.textContent=win?'🏆 VICTOIRE':'💀 DÉFAITE';rw.textContent=win?'+10 trophées':'Réessaie !';ov.style.display='flex'}
-function shot(ax,ay,bx,by,enemy=false,damage=12){let b=document.createElement('i');b.className='b';if(enemy)b.style.background='#ff8190';document.getElementById('arena').appendChild(b);let n=0,l=Math.hypot(bx-ax,by-ay)||1;let id=setInterval(()=>{n+=.035;let q=n/l;pos(b,ax+(bx-ax)*q,ay+(by-ay)*q);if(q>=1||n>1.2){clearInterval(id);b.remove()}if(!enemy&&Math.hypot((ax+(bx-ax)*q)-ex,(ay+(by-ay)*q)-ey)<.055){E=Math.max(0,E-damage);S=Math.min(100,S+damage);clearInterval(id);b.remove();if(!E)end(true)}} ,16)}
-function attack(){if(!dead)shot(x,y,ex,ey,false,12)}
-function special(){if(!dead&&S>=100){S=0;shot(x,y,ex,ey,false,45)}}
-document.getElementById('atk').onpointerdown=attack;sup.onpointerdown=special;
+
+function updateUI(){
+  hp.style.width=(H/100)*100+'%';
+  statHp.textContent=Math.max(0,Math.floor(H));
+  statEnem.textContent=Math.max(0,Math.floor(E));
+  sup.classList.toggle('unavailable',S<100);
+}
+
+function floatingDamage(x,y,damage,isEnemy=false){
+  const dmg=document.createElement('div');
+  dmg.id='floatingDamage';
+  dmg.className='damage-text';
+  dmg.textContent='-'+Math.floor(damage);
+  dmg.style.color=isEnemy?'#ffb700':'#ff6b6b';
+  dmg.style.left=x*100+'%';
+  dmg.style.top=y*100+'%';
+  arena.appendChild(dmg);
+  setTimeout(()=>dmg.remove(),800);
+}
+
+function spawnCollectible(x,y){
+  const c=document.createElement('div');
+  c.className='collectible';
+  c.style.left=x*100+'%';
+  c.style.top=y*100+'%';
+  arena.appendChild(c);
+  setTimeout(()=>c.remove(),5000);
+}
+
+function end(win){
+  dead=1;
+  msg.textContent=win?'🏆 VICTOIRE ÉCLATANTE!':'💀 DÉFAITE...';
+  res.textContent=win?'🏆 VICTOIRE':'💀 DÉFAITE';
+  rw.textContent=win?'+25 trophées\n⭐ Excellent combat!':'Réessaie!\nTu peux faire mieux!';
+  ov.style.display='flex';
+}
+
+function shot(ax,ay,bx,by,enemy=false,damage=12){
+  let b=document.createElement('i');
+  b.className='b';
+  if(enemy)b.style.background='#ff8190';
+  arena.appendChild(b);
+  let n=0,l=Math.hypot(bx-ax,by-ay)||0.01,time=0;
+  let tx=ax,ty=ay;
+  const interval=setInterval(()=>{
+    time+=0.05;
+    if(time>0.3){clearInterval(interval);b.remove();
+      if(Math.hypot(bx-tx,by-ty)<0.08){
+        if(!enemy){E-=damage;floatingDamage(ex,ey,damage,true);}
+        else{H-=damage;floatingDamage(x,y,damage,false);}
+        updateUI();
+        if(E<=0)end(true);if(H<=0)end(false);
+      }
+      return;
+    }
+    tx=ax+(bx-ax)*(time/0.3);ty=ay+(by-ay)*(time/0.3);
+    pos(b,tx,ty);
+  },16);
+}
+
+function attack(){
+  if(!dead&&ammo>0){
+    ammo--;
+    updateAmmo();
+    shot(x,y,ex,ey,false,12);
+    cd=0.5;
+  }
+}
+
+function special(){
+  if(!dead&&S>=100){
+    S=0;
+    for(let i=0;i<3;i++){
+      setTimeout(()=>{
+        const angle=(Math.PI*2/3)*i;
+        const tx=ex+Math.cos(angle)*0.15;
+        const ty=ey+Math.sin(angle)*0.15;
+        shot(x,y,tx,ty,false,35);
+      },i*100);
+    }
+    updateUI();
+  }
+}
+
+atk.onpointerdown=attack;sup.onpointerdown=special;
+
 let active=false,j=document.getElementById('joy'),st=document.getElementById('stick');
-j.onpointerdown=q=>{active=true;j.setPointerCapture(q.pointerId);mv(q)};j.onpointermove=q=>{if(active)mv(q)};j.onpointerup=()=>{active=false;dx=dy=0;st.style.left='42px';st.style.top='42px'};
-function mv(q){let r=j.getBoundingClientRect(),a=Math.atan2(q.clientY-r.top-r.height/2,q.clientX-r.left-r.width/2),m=Math.min(48,Math.hypot(q.clientX-r.left-r.width/2,q.clientY-r.top-r.height/2));dx=Math.cos(a)*m/48;dy=Math.sin(a)*m/48;st.style.left=42+Math.cos(a)*m+'px';st.style.top=42+Math.sin(a)*m+'px'}
-function loop(){if(!dead){x=Math.max(.06,Math.min(.94,x+dx*.012));y=Math.max(.1,Math.min(.9,y+dy*.012));let a=ex-x,b=ey-y,d=Math.hypot(a,b)||1;if(d>.25){ex+=-a/d*.002;ey+=-b/d*.002}cd-=.016;if(cd<=0&&d<.8){cd=1.1;shot(ex,ey,x,y,true,10)}hp.style.width=H+'%';sup.textContent=S>=100?'SUPER READY':'SUPER';pos(p,x,y);pos(e,ex,ey)}requestAnimationFrame(loop)}loop();
+j.onpointerdown=q=>{active=true;j.setPointerCapture(q.pointerId);mv(q)};
+j.onpointermove=q=>{if(active)mv(q)};
+j.onpointerup=()=>{active=false;dx=dy=0;st.style.left='42px';st.style.top='42px'};
+
+function mv(q){
+  let r=j.getBoundingClientRect(),a=Math.atan2(q.clientY-r.top-r.height/2,q.clientX-r.left-r.width/2),m=Math.min(48,Math.hypot(q.clientX-r.left-r.width/2,q.clientY-r.top-r.height/2));
+  dx=Math.cos(a)*m;dy=Math.sin(a)*m;
+  st.style.left=(42+dx)+'px';st.style.top=(42+dy)+'px';
+}
+
+function loop(){
+  if(!dead){
+    x=Math.max(.06,Math.min(.94,x+dx*.012));
+    y=Math.max(.1,Math.min(.9,y+dy*.012));
+    
+    let a=ex-x,b=ey-y,d=Math.hypot(a,b)||1;
+    if(d>.25){
+      ex+=-a/d*.002;
+      ey+=-b/d*.002;
+    }
+    
+    cd-=.016;
+    if(cd<=0&&E>0&&Math.random()<.008){
+      shot(ex,ey,x,y,true,10);
+      cd=.8;
+    }
+    
+    S=Math.min(100,S+0.3);
+    
+    if(ammo<maxAmmo&&Math.random()<0.005){
+      ammo++;
+      updateAmmo();
+      spawnCollectible(Math.random(),Math.random()*0.8+0.1);
+    }
+    
+    pos(p,x,y);pos(e,ex,ey);updateUI();
+  }
+  requestAnimationFrame(loop);
+}
+
+updateAmmo();
+updateUI();
+loop();
 </script></body></html>
